@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat Agent</title>
+<style>
+  /* ── Reset & Base ───────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg-deep: #0d0d0f;
+    --bg-surface: #141416;
+    --bg-elevated: #1c1c20;
+    --bg-hover: #25252a;
+    --bg-active: #2a2a2f;
+    --border: #2a2a30;
+    --border-light: #33333a;
+    --text-primary: #ecece6;
+    --text-secondary: #94949c;
+    --text-muted: #5c5c64;
+    --accent: #f5a623;
+    --accent-hover: #e0981a;
+    --accent-dim: rgba(245, 166, 35, 0.12);
+    --accent-glow: rgba(245, 166, 35, 0.06);
+    --user-bg: linear-gradient(135deg, #f5a623 0%, #d4890f 100%);
+    --ai-bg: #1c1c20;
+    --ai-border: #2a2a30;
+    --danger: #ef4444;
+    --danger-hover: #dc2626;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.3);
+    --transition: 180ms ease;
+    font-family: 'Segoe UI Variable Display', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+  }
+  body { overflow: hidden; height: 100vh; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  /* ── Layout ─────────────────────────────────────────────────── */
+  #app { display: flex; height: 100vh; width: 100vw; }
+
+  /* ── Sidebar ────────────────────────────────────────────────── */
+  #sidebar {
+    width: 260px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    background: var(--bg-deep);
+    border-right: 1px solid var(--border);
+    user-select: none;
+  }
+  #sidebar-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 16px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  #sidebar-header h1 {
+    font-size: 16px; font-weight: 600; letter-spacing: -0.3px;
+    color: var(--text-primary);
+  }
+  #sidebar-header h1 span { color: var(--accent); }
+  #new-btn {
+    width: 32px; height: 32px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    font-size: 18px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background var(--transition), border-color var(--transition);
+  }
+  #new-btn:hover { background: var(--bg-hover); border-color: var(--accent); color: var(--accent); }
+
+  #session-list {
+    flex: 1; overflow-y: auto;
+    padding: 8px;
+  }
+  .session-item {
+    display: flex; align-items: center;
+    padding: 10px 12px; margin-bottom: 2px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition);
+    position: relative;
+  }
+  .session-item:hover { background: var(--bg-hover); }
+  .session-item.active {
+    background: var(--bg-active);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .session-item .title {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .session-item.active .title { color: var(--text-primary); }
+  .session-item .del-btn {
+    opacity: 0; width: 22px; height: 22px; border-radius: 4px;
+    border: none; background: transparent;
+    color: var(--text-muted); font-size: 16px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: opacity var(--transition), background var(--transition), color var(--transition);
+  }
+  .session-item:hover .del-btn { opacity: 1; }
+  .session-item .del-btn:hover { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+  /* ── Memory management (sidebar) ──────────────────────────── */
+  #mem-section {
+    border-top: 1px solid var(--border);
+    padding: 12px 12px 8px;
+    flex-shrink: 0;
+    max-height: 200px;
+    display: flex; flex-direction: column;
+  }
+  #mem-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px; flex-shrink: 0;
+  }
+  #mem-header span {
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  #mem-refresh-btn {
+    width: 24px; height: 24px; border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    font-size: 14px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background var(--transition), color var(--transition);
+  }
+  #mem-refresh-btn:hover { background: var(--bg-hover); color: var(--accent); border-color: var(--accent); }
+  #mem-list { overflow-y: auto; flex: 1; }
+  .mem-item {
+    display: flex; align-items: flex-start;
+    padding: 6px 8px; margin-bottom: 2px;
+    border-radius: 4px;
+    font-size: 12px; color: var(--text-secondary);
+    transition: background var(--transition);
+  }
+  .mem-item:hover { background: var(--bg-hover); }
+  .mem-item .mem-ns {
+    font-size: 10px; font-weight: 600; color: var(--text-muted);
+    background: var(--bg-deep); padding: 1px 5px; border-radius: 3px;
+    margin-right: 6px; white-space: nowrap; flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .mem-item .mem-body { flex: 1; overflow: hidden; line-height: 1.4; }
+  .mem-item .mem-body .mem-key { color: var(--text-primary); font-weight: 500; }
+  .mem-item .mem-body .mem-val { color: var(--text-secondary); word-break: break-all; }
+  .mem-item .mem-del {
+    opacity: 0; width: 18px; height: 18px; border-radius: 3px;
+    border: none; background: transparent;
+    color: var(--text-muted); font-size: 12px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-left: 4px;
+    transition: opacity var(--transition), color var(--transition);
+  }
+  .mem-item:hover .mem-del { opacity: 1; }
+  .mem-item .mem-del:hover { color: var(--danger); background: rgba(239,68,68,0.12); }
+  #mem-empty {
+    font-size: 12px; color: var(--text-muted); padding: 8px;
+    text-align: center;
+  }
+
+  /* ── Document library (sidebar) ─────────────────────────────────── */
+  #doc-section {
+    border-top: 1px solid var(--border);
+    padding: 12px 12px 8px;
+    flex-shrink: 0;
+  }
+  #doc-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  #doc-header span {
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .model-status {
+    font-size: 10px; font-weight: 500;
+    padding: 1px 6px; border-radius: 4px;
+    margin-left: 4px;
+    color: var(--text-muted);
+  }
+  .model-status.ready { color: #22c55e; }
+  .model-status.error { color: var(--danger); }
+  .model-status.loading { color: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+  #doc-upload-btn {
+    width: 24px; height: 24px; border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    font-size: 14px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background var(--transition), color var(--transition);
+  }
+  #doc-upload-btn:hover { background: var(--bg-hover); color: var(--accent); border-color: var(--accent); }
+  #doc-upload-btn.loading {
+    position: relative; opacity: 0.5; pointer-events: none;
+  }
+  #doc-upload-btn.loading::after {
+    content: '';
+    width: 10px; height: 10px;
+    border: 1.5px solid var(--text-muted);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    position: absolute;
+    top: calc(50% - 5px); left: calc(50% - 5px);
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Right-click context menu ─────────────────────────── */
+  .ctx-menu {
+    position: fixed; z-index: 2000;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 4px 0;
+    min-width: 140px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    display: none;
+  }
+  .ctx-menu.visible { display: block; }
+  .ctx-item {
+    padding: 6px 14px; font-size: 13px;
+    cursor: pointer; color: var(--text-secondary);
+    transition: background var(--transition);
+  }
+  .ctx-item:hover { background: var(--bg-hover); }
+  .ctx-item.danger { color: var(--danger); }
+  .ctx-item.danger:hover { background: rgba(239,68,68,0.12); }
+  #doc-list {
+    max-height: 180px; overflow-y: auto;
+  }
+  .doc-item {
+    display: flex; align-items: center;
+    padding: 6px 8px; margin-bottom: 2px;
+    border-radius: 4px;
+    font-size: 12px; color: var(--text-secondary);
+    transition: background var(--transition);
+  }
+  .doc-item:hover { background: var(--bg-hover); }
+  .doc-item .doc-icon { margin-right: 6px; font-size: 13px; }
+  .doc-item .doc-name {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .doc-item .doc-del {
+    opacity: 0; width: 18px; height: 18px; border-radius: 3px;
+    border: none; background: transparent;
+    color: var(--text-muted); font-size: 12px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: opacity var(--transition), color var(--transition);
+  }
+  .doc-item:hover .doc-del { opacity: 1; }
+  .doc-item .doc-del:hover { color: var(--danger); background: rgba(239,68,68,0.12); }
+  #doc-empty {
+    font-size: 12px; color: var(--text-muted); padding: 8px;
+    text-align: center;
+  }
+
+  /* ── Main chat ──────────────────────────────────────────────── */
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  #messages-area {
+    flex: 1; overflow-y: auto;
+    padding: 24px 32px 16px;
+    scroll-behavior: smooth;
+  }
+  #messages-area:empty::after {
+    content: '发送一条消息开始对话';
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; color: var(--text-muted); font-size: 14px;
+  }
+
+  .message {
+    display: flex;
+    margin-bottom: 20px;
+    animation: msgIn 300ms ease both;
+  }
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .message.user { justify-content: flex-end; }
+  .message.assistant { justify-content: flex-start; }
+
+  .bubble {
+    max-width: 72%;
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .message.user .bubble {
+    background: var(--user-bg);
+    color: #0d0d0f;
+    border-bottom-right-radius: 4px;
+    font-weight: 450;
+  }
+  .message.assistant .bubble {
+    background: var(--ai-bg);
+    border: 1px solid var(--ai-border);
+    border-bottom-left-radius: 4px;
+    color: var(--text-primary);
+    box-shadow: var(--shadow);
+  }
+  .bubble .cursor {
+    display: inline-block;
+    width: 2px; height: 1em;
+    background: var(--accent);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 0.8s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Code blocks inside bubbles */
+  .bubble code {
+    font-family: 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 12.5px;
+    background: rgba(0,0,0,0.25);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  .bubble pre {
+    margin: 10px 0;
+    padding: 12px 14px;
+    background: rgba(0,0,0,0.3);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+  }
+  .bubble pre code {
+    background: none; padding: 0;
+  }
+
+  /* ── Input bar ───────────────────────────────────────────────── */
+  #input-bar {
+    display: flex; align-items: flex-end; gap: 8px;
+    padding: 16px 24px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-surface);
+  }
+  #input-bar textarea {
+    flex: 1; resize: none;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    font-family: inherit; font-size: 14px; line-height: 1.45;
+    outline: none;
+    min-height: 42px; max-height: 160px;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+  #input-bar textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  #input-bar textarea::placeholder { color: var(--text-muted); }
+
+  #search-btn {
+    height: 42px; width: 42px; flex-shrink: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    font-size: 16px; line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background var(--transition), border-color var(--transition), color var(--transition);
+    position: relative;
+  }
+  #search-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+  #search-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+    box-shadow: 0 0 8px var(--accent-dim);
+  }
+  #search-btn.active:hover { background: var(--accent-glow); }
+  #search-btn .tooltip {
+    position: absolute; bottom: calc(100% + 6px);
+    left: 50%; transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 11px; padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    pointer-events: none; opacity: 0;
+    transition: opacity var(--transition);
+  }
+  #search-btn:hover .tooltip { opacity: 1; }
+
+  /* ── Context compression toggle ─────────────────────────────────── */
+  #ctx-btn {
+    height: 42px; width: 42px; flex-shrink: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    font-size: 14px; line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background var(--transition), border-color var(--transition), color var(--transition);
+    position: relative;
+    font-weight: 600;
+  }
+  #ctx-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+  #ctx-btn.active {
+    border-color: #22c55e;
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.12);
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.06);
+  }
+  #ctx-btn.active:hover { background: rgba(34, 197, 94, 0.08); }
+  #ctx-btn .tooltip {
+    position: absolute; bottom: calc(100% + 6px);
+    left: 50%; transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 11px; padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    pointer-events: none; opacity: 0;
+    transition: opacity var(--transition);
+  }
+  #ctx-btn:hover .tooltip { opacity: 1; }
+
+  #send-btn {
+    height: 42px; padding: 0 20px; flex-shrink: 0;
+    border: none; border-radius: var(--radius-md);
+    background: var(--accent);
+    color: #0d0d0f;
+    font-family: inherit; font-size: 14px; font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition), transform 120ms ease;
+  }
+  #send-btn:hover { background: var(--accent-hover); }
+  #send-btn:active { transform: scale(0.96); }
+  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* ── Search indicator ────────────────────────────────────────── */
+  .search-indicator {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; margin-bottom: 12px;
+    background: var(--accent-dim);
+    border: 1px solid rgba(245, 166, 35, 0.2);
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    font-size: 13px;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+  .search-indicator .dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: dotPulse 1.2s ease-in-out infinite;
+  }
+  @keyframes dotPulse {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  /* ── Error ───────────────────────────────────────────────────── */
+  .error-msg {
+    color: var(--danger);
+    font-size: 13px;
+    padding: 8px 14px;
+    background: rgba(239,68,68,0.1);
+    user-select: text;
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: var(--radius-sm);
+    margin: 8px 0;
+  }
+
+  /* ── Confirmation modal (interrupt / HITL) ───────────────────── */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.6);
+    display: none; align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal-box {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    max-width: 520px; width: 90%;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  }
+  .modal-box h3 {
+    font-size: 16px; font-weight: 600; margin-bottom: 4px;
+    color: var(--text-primary);
+  }
+  .modal-box .modal-sub {
+    font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;
+  }
+  .modal-box .modal-content {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px; margin-bottom: 20px;
+    font-size: 13px; line-height: 1.6;
+    word-break: break-word;
+  }
+  .modal-box .modal-content .label {
+    color: var(--text-muted); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 4px;
+  }
+  .modal-box .modal-content .query {
+    color: var(--text-primary); font-weight: 450;
+  }
+  .modal-box .modal-actions {
+    display: flex; gap: 10px; justify-content: flex-end;
+  }
+  .modal-box .modal-actions button {
+    padding: 8px 20px; border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    cursor: pointer; border: none;
+    transition: background var(--transition);
+  }
+  .modal-box .modal-actions .btn-cancel {
+    background: var(--bg-hover); color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  .modal-box .modal-actions .btn-cancel:hover { background: var(--bg-active); }
+  .modal-box .modal-actions .btn-confirm {
+    background: var(--accent); color: #0d0d0f; font-weight: 600;
+  }
+  .modal-box .modal-actions .btn-confirm:hover { background: var(--accent-hover); }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <h1>Chat<span>Agent</span></h1>
+      <button id="new-btn" title="新会话">+</button>
+    </div>
+    <nav id="session-list"></nav>
+
+    <!-- ── Memory management ──────────────────────────────────── -->
+    <section id="mem-section">
+      <div id="mem-header">
+        <span>记忆管理</span>
+        <button id="mem-refresh-btn" title="刷新">↻</button>
+      </div>
+      <div id="mem-list"></div>
+      <div id="mem-empty">暂无记忆</div>
+    </section>
+
+    <section id="doc-section">
+      <div id="doc-header">
+        <span>文档库</span>
+        <span id="model-status" class="model-status">···</span>
+        <button id="doc-upload-btn" title="上传文档">+</button>
+      </div>
+      <div id="doc-list"></div>
+      <div id="doc-empty">暂无文档，点击 + 上传</div>
+    </section>
+
+  </aside>
+
+  <!-- Main -->
+  <main id="main">
+    <div id="messages-area"></div>
+    <div id="input-bar">
+      <textarea id="input" rows="1" placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"></textarea>
+      <button id="search-btn" title="联网搜索">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <span class="tooltip">联网搜索：关闭</span>
+      </button>
+      <button id="ctx-btn" title="上下文压缩">
+        <span>≡</span>
+        <span class="tooltip">上下文压缩：开启</span>
+      </button>
+      <button id="send-btn">发送</button>
+    </div>
+  </main>
+</div>
+
+<!-- ── Confirmation modal (interrupt / HITL) ────────────── -->
+<div id="confirm-modal" class="modal-overlay">
+  <div class="modal-box">
+    <h3 id="confirm-title">确认搜索</h3>
+    <p class="modal-sub" id="confirm-desc">AI 助手想要搜索以下内容：</p>
+    <div class="modal-content" id="confirm-content"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="confirm-no">取消</button>
+      <button class="btn-confirm" id="confirm-yes">允许</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Right-click context menu ─────────────────────────── -->
+<div id="ctx-menu" class="ctx-menu">
+  <div class="ctx-item danger" id="ctx-delete-msg">删除这条消息</div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   Chat Agent ─ Frontend
+   ═══════════════════════════════════════════════════════════════ */
+const state = {
+  sessions: [],
+  currentId: null,
+  streaming: false,
+  pollingTimer: null,
+  searchEnabled: false,
+  contextCompression: true,
+
+};
+
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
+
+const msgArea = $('#messages-area');
+const input = $('#input');
+const sendBtn = $('#send-btn');
+const searchBtn = $('#search-btn');
+const searchTooltip = searchBtn ? searchBtn.querySelector('.tooltip') : null;
+const ctxBtn = $('#ctx-btn');
+const ctxTooltip = ctxBtn ? ctxBtn.querySelector('.tooltip') : null;
+const sessionList = $('#session-list');
+
+/* ── Render helpers ──────────────────────────────────────────── */
+function scrollToBottom() {
+  requestAnimationFrame(() => { msgArea.scrollTop = msgArea.scrollHeight; });
+}
+
+function renderSessions() {
+  sessionList.innerHTML = state.sessions.map(s => `
+    <div class="session-item${s.id === state.currentId ? ' active' : ''}" data-id="${s.id}">
+      <span class="title">${escapeHtml(s.title)}</span>
+      <button class="del-btn" data-id="${s.id}" title="删除">×</button>
+    </div>
+  `).join('');
+
+  // Click session
+  sessionList.querySelectorAll('.session-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.del-btn')) return;
+      switchSession(el.dataset.id);
+    });
+  });
+  // Delete button
+  sessionList.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteSession(btn.dataset.id);
+    });
+  });
+}
+
+let _msgIndex = 0;
+
+function renderMessages(messages) {
+  msgArea.innerHTML = '';
+  _msgIndex = 0;
+  messages.forEach(m => addMessage(m.role, m.content, false));
+  scrollToBottom();
+}
+
+function addMessage(role, content, isStreaming = false) {
+  const div = document.createElement('div');
+  const idx = _msgIndex++;
+  div.className = `message ${role}`;
+  div.dataset.streaming = isStreaming ? 'true' : 'false';
+  if (!isStreaming) {
+    div.dataset.index = idx;
+    div.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showContextMenu(e, idx);
+    });
+  }
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = content;
+  if (isStreaming) {
+    const cursor = document.createElement('span');
+    cursor.className = 'cursor';
+    bubble.appendChild(cursor);
+  }
+  div.appendChild(bubble);
+  msgArea.appendChild(div);
+  scrollToBottom();
+  return div;
+}
+
+function appendToken(text) {
+  const msgs = msgArea.querySelectorAll('.message.assistant');
+  if (msgs.length === 0) return;
+  const last = msgs[msgs.length - 1];
+  if (last.dataset.streaming !== 'true') return;
+
+  const bubble = last.querySelector('.bubble');
+  const cursor = bubble.querySelector('.cursor');
+
+  // Insert text before the cursor span
+  if (cursor) {
+    cursor.insertAdjacentText('beforebegin', text);
+  } else {
+    bubble.textContent += text;
+  }
+  scrollToBottom();
+}
+
+function finalizeStreaming() {
+  const msgs = msgArea.querySelectorAll('.message.assistant');
+  if (msgs.length === 0) return;
+  const last = msgs[msgs.length - 1];
+  if (last.dataset.streaming !== 'true') return;
+  last.dataset.streaming = 'false';
+  const cursor = last.querySelector('.cursor');
+  if (cursor) cursor.remove();
+  // 给完成的消息赋予索引和右键删除
+  const idx = parseInt(last.dataset.index);
+  if (isNaN(idx)) {
+    const allMsgs = msgArea.querySelectorAll('.message');
+    const actualIndex = Array.from(allMsgs).indexOf(last);
+    last.dataset.index = actualIndex;
+    last.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showContextMenu(e, actualIndex);
+    });
+  }
+}
+
+function addError(text) {
+  const div = document.createElement('div');
+  div.className = 'error-msg';
+  div.textContent = text;
+  msgArea.appendChild(div);
+  scrollToBottom();
+}
+
+function clearMessages() {
+  msgArea.innerHTML = '';
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+/* ── Session operations ──────────────────────────────────────── */
+async function loadSessions() {
+  state.sessions = await pywebview.api.get_sessions();
+  renderSessions();
+}
+
+async function switchSession(id) {
+  stopPolling();
+  state.currentId = id;
+  const messages = await pywebview.api.get_messages(id);
+  renderMessages(messages);
+  renderSessions();
+}
+
+async function newSession() {
+  const session = await pywebview.api.create_session();
+  state.sessions.unshift(session);
+  renderSessions();
+  await switchSession(session.id);
+}
+
+// ── Right-click delete message ──────────────────────────────
+let _ctxMsgIndex = -1;
+
+function showContextMenu(e, index) {
+  console.log('showContextMenu', index);
+  _ctxMsgIndex = index;
+  const menu = document.getElementById('ctx-menu');
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+  menu.classList.add('visible');
+}
+
+function hideContextMenu() {
+  document.getElementById('ctx-menu').classList.remove('visible');
+  _ctxMsgIndex = -1;
+}
+
+async function deleteMessageByIndex() {
+  const idx = _ctxMsgIndex;
+  hideContextMenu();
+  if (idx < 0) return;
+  // 获取当前消息列表，找出要删除的一对（问题+回答）
+  let currentMsgs = await pywebview.api.get_messages(state.currentId);
+  if (idx >= currentMsgs.length) return;
+  const role = currentMsgs[idx].role;
+  let indices = [idx];
+  // 如果是用户消息，连下一条 AI 回复一起删
+  if (role === 'user' && idx + 1 < currentMsgs.length && currentMsgs[idx + 1].role === 'assistant') {
+    indices.push(idx + 1);
+  }
+  // 如果是 AI 回复，连上一条用户消息一起删
+  if (role === 'assistant' && idx - 1 >= 0 && currentMsgs[idx - 1].role === 'user') {
+    indices.unshift(idx - 1);
+  }
+  const desc = indices.length > 1 ? '确定删除该问答？' : '确定删除这条消息？';
+  if (!confirm(desc)) return;
+  try {
+    // 从大到小删，避免索引偏移
+    indices.sort((a, b) => b - a);
+    for (const i of indices) {
+      await pywebview.api.delete_message(state.currentId, i);
+    }
+    // 重新加载
+    const raw = await pywebview.api.get_messages(state.currentId);
+    _msgIndex = 0;
+    msgArea.innerHTML = '';
+    raw.forEach((m, i) => {
+      const div = document.createElement('div');
+      div.className = 'message ' + m.role;
+      div.dataset.index = i;
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.textContent = m.content;
+      div.appendChild(bubble);
+      div.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showContextMenu(e, i);
+      });
+      msgArea.appendChild(div);
+    });
+    scrollToBottom();
+  } catch (e) {
+    addError('删除失败: ' + e.message);
+  }
+}
+
+// Wire up context menu
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#ctx-menu')) hideContextMenu();
+});
+document.getElementById('ctx-delete-msg').addEventListener('click', (e) => { e.stopPropagation(); deleteMessageByIndex(); });
+// Prevent default right-click globally for the app
+msgArea.addEventListener('contextmenu', (e) => {
+  if (!e.target.closest('.bubble')) hideContextMenu();
+});
+
+async function deleteSession(id) {
+  if (state.sessions.length <= 1) {
+    addError('至少保留一个会话');
+    return;
+  }
+  if (!confirm('确定删除该会话？删除后无法恢复。')) return;
+  await pywebview.api.delete_session(id);
+  state.sessions = state.sessions.filter(s => s.id !== id);
+  if (state.currentId === id) {
+    // Switch to the first available session
+    await switchSession(state.sessions[0].id);
+  } else {
+    renderSessions();
+  }
+}
+
+/* ── Streaming ───────────────────────────────────────────────── */
+function showSearchIndicator(type) {
+  let el = document.getElementById('search-indicator');
+  let text;
+  if (type === 'rag_search') text = '正在查阅文档...';
+  else if (type === 'save_memory') text = '正在保存记忆...';
+  else text = '正在搜索网络信息...';
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'search-indicator';
+    el.className = 'search-indicator';
+    el.innerHTML = '<span class="dot"></span> ' + text;
+    msgArea.appendChild(el);
+    scrollToBottom();
+  } else if (el.innerHTML.indexOf(text) === -1) {
+    el.innerHTML = '<span class="dot"></span> ' + text;
+  }
+}
+
+function hideSearchIndicator() {
+  const el = document.getElementById('search-indicator');
+  if (el) el.remove();
+}
+
+async function sendMessage() {
+  const text = input.value.trim();
+  if (!text || state.streaming) return;
+  if (!state.currentId) {
+    addError('会话尚未就绪，请稍后重试');
+    return;
+  }
+
+  input.value = '';
+  input.style.height = 'auto';
+  state.streaming = true;
+  input.disabled = true;
+  sendBtn.disabled = true;
+  searchBtn.disabled = true;
+  if (ctxBtn) ctxBtn.disabled = true;
+
+  // Show user message immediately
+  addMessage('user', text, false);
+
+  // Create streaming AI bubble
+  addMessage('assistant', '', true);
+
+  try {
+    await pywebview.api.send_message(state.currentId, text, state.searchEnabled, state.contextCompression);
+  } catch (e) {
+    addError('发送失败: ' + e.message);
+    stopPolling();
+    return;
+  }
+
+  // Start polling
+  state.pollingTimer = setInterval(pollOnce, 60);
+}
+
+/* ── Interrupt / confirmation dialog ──────────────────────────── */
+function showConfirmDialog(interruptData) {
+  const toolCalls = (interruptData && interruptData.tool_calls) || [];
+  if (toolCalls.length === 0) return;
+
+  const isRag = toolCalls.some(tc => tc.name === 'rag_search');
+
+  document.getElementById('confirm-title').textContent = isRag ? '确认查阅文档' : '确认搜索';
+  document.getElementById('confirm-desc').textContent = isRag
+    ? 'AI 助手想要查询已上传的文档内容：'
+    : 'AI 助手想要搜索互联网信息：';
+  document.getElementById('confirm-yes').textContent = isRag ? '允许查阅' : '允许搜索';
+
+  const html = toolCalls.map(tc => {
+    const query = (tc.args && tc.args.query) || '';
+    const label = tc.name === 'rag_search' ? '文档查询' : '搜索查询';
+    return '<div class="label">' + label + '</div>'
+      + '<div class="query">' + escapeHtml(query) + '</div>';
+  }).join('');
+  document.getElementById('confirm-content').innerHTML = html;
+  document.getElementById('confirm-modal').classList.add('visible');
+}
+
+async function confirmToolCall(approved) {
+  document.getElementById('confirm-modal').classList.remove('visible');
+  try {
+    await pywebview.api.confirm_tool(state.currentId, approved);
+    // Resume polling — thread will continue generating after resume
+    state.streaming = true;
+    state.pollingTimer = setInterval(pollOnce, 60);
+  } catch (e) {
+    addError('确认失败: ' + e.message);
+  }
+}
+
+// Extract polling body into a named function for reuse
+async function pollOnce() {
+  try {
+    const result = await pywebview.api.get_stream_output(state.currentId);
+    for (const token of result.tokens) {
+      appendToken(token);
+    }
+    if (result.searching) {
+      showSearchIndicator(result.searching);
+    } else {
+      hideSearchIndicator();
+    }
+    if (result.interrupt) {
+      stopPolling();
+      showConfirmDialog(result.interrupt);
+      return;
+    }
+    if (result.done) {
+      finalizeStreaming();
+      stopPolling();
+      if (result.error) {
+        addError(result.error);
+      }
+      await loadSessions();
+      await loadMemories();
+    }
+  } catch (e) {
+    addError('轮询错误: ' + e.message);
+    stopPolling();
+  }
+}
+
+// Wire up confirmation buttons
+document.getElementById('confirm-yes').addEventListener('click', function () {
+  confirmToolCall(true);
+});
+document.getElementById('confirm-no').addEventListener('click', function () {
+  confirmToolCall(false);
+});
+
+function stopPolling() {
+  if (state.pollingTimer) {
+    clearInterval(state.pollingTimer);
+    state.pollingTimer = null;
+  }
+  state.streaming = false;
+  input.disabled = false;
+  sendBtn.disabled = false;
+  if (searchBtn) searchBtn.disabled = false;
+  if (ctxBtn) ctxBtn.disabled = false;
+  hideSearchIndicator();
+  input.focus();
+}
+
+/* ── Input handling ──────────────────────────────────────────── */
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Auto-resize textarea
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+});
+
+sendBtn.addEventListener('click', sendMessage);
+
+/* ── Search toggle ──────────────────────────────────────────── */
+if (searchBtn) {
+  searchBtn.addEventListener('click', function () {
+    state.searchEnabled = !state.searchEnabled;
+    searchBtn.classList.toggle('active', state.searchEnabled);
+    if (searchTooltip) {
+      searchTooltip.textContent = state.searchEnabled ? '联网搜索：开启' : '联网搜索：关闭';
+    }
+  });
+}
+
+/* ── Context compression toggle ───────────────────────────────── */
+if (ctxBtn) {
+  ctxBtn.addEventListener('click', function () {
+    state.contextCompression = !state.contextCompression;
+    ctxBtn.classList.toggle('active', state.contextCompression);
+    if (ctxTooltip) {
+      ctxTooltip.textContent = state.contextCompression ? '上下文压缩：开启' : '上下文压缩：关闭';
+    }
+  });
+  // Default on
+  ctxBtn.classList.add('active');
+}
+
+/* ── New session ─────────────────────────────────────────────── */
+$('#new-btn').addEventListener('click', newSession);
+
+/* ── Document management ─────────────────────────────────────── */
+const docList = $('#doc-list');
+const docEmpty = $('#doc-empty');
+const docUploadBtn = $('#doc-upload-btn');
+
+function renderDocuments(docs) {
+  if (!docs || docs.length === 0) {
+    docList.innerHTML = '';
+    docEmpty.style.display = 'block';
+    return;
+  }
+  docEmpty.style.display = 'none';
+  docList.innerHTML = docs.map(d => {
+    const icon = d.filename.endsWith('.pdf') ? 'PDF' :
+                 d.filename.endsWith('.docx') ? 'W' :
+                 d.filename.endsWith('.md') ? 'MD' : 'T';
+    const chunks = d.chunks || 0;
+    return '<div class="doc-item" data-id="' + d.id + '">'
+      + '<span class="doc-icon">' + icon + '</span>'
+      + '<span class="doc-name" title="' + escapeHtml(d.filename) + ' (' + chunks + ' 块)">' + escapeHtml(d.filename) + '</span>'
+      + '<button class="doc-del" data-id="' + d.id + '" title="删除">x</button>'
+      + '</div>';
+  }).join('');
+
+  docList.querySelectorAll('.doc-del').forEach(btn => {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      deleteDocument(this.dataset.id);
+    });
+  });
+}
+
+const modelStatusEl = document.getElementById('model-status');
+
+async function updateModelStatus() {
+  try {
+    const st = await pywebview.api.get_rag_status();
+    modelStatusEl.className = 'model-status ' + st.status;
+    if (st.status === 'ready') modelStatusEl.textContent = '就绪';
+    else if (st.status === 'error') modelStatusEl.textContent = '失败: ' + (st.error || '');
+    else modelStatusEl.textContent = '加载中...';
+    return st.status;
+  } catch (e) {
+    modelStatusEl.className = 'model-status error';
+    modelStatusEl.textContent = '未知';
+    return 'error';
+  }
+}
+
+async function loadDocuments() {
+  try {
+    const docs = await pywebview.api.get_documents();
+    renderDocuments(docs);
+  } catch (e) {
+    console.error('加载文档列表失败:', e);
+  }
+}
+
+async function uploadDocuments() {
+  docUploadBtn.classList.add('loading');
+  docUploadBtn.textContent = '';
+  try {
+    const results = await pywebview.api.upload_documents();
+    if (results && results.length > 0) {
+      results.forEach(r => {
+        if (r.error) addError('上传失败: ' + r.error);
+      });
+      await loadDocuments();
+    }
+  } catch (e) {
+    addError('上传失败: ' + e.message);
+  } finally {
+    docUploadBtn.classList.remove('loading');
+    docUploadBtn.textContent = '+';
+  }
+}
+
+/* ── Memory management ─────────────────────────────────────────── */
+const memList = document.getElementById('mem-list');
+const memEmpty = document.getElementById('mem-empty');
+
+function renderMemories(memories) {
+  if (!memories || memories.length === 0) {
+    memList.innerHTML = '';
+    memEmpty.style.display = 'block';
+    return;
+  }
+  memEmpty.style.display = 'none';
+  memList.innerHTML = memories.map(m =>
+    '<div class="mem-item" data-ns="' + escapeHtml(m.namespace) + '" data-key="' + escapeHtml(m.key) + '">'
+      + '<span class="mem-ns">' + escapeHtml(m.namespace) + '</span>'
+      + '<span class="mem-body"><span class="mem-key">' + escapeHtml(m.key) + '</span>: <span class="mem-val">' + escapeHtml(m.value) + '</span></span>'
+      + '<button class="mem-del" title="删除">x</button>'
+    + '</div>'
+  ).join('');
+
+  memList.querySelectorAll('.mem-del').forEach(btn => {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const item = this.closest('.mem-item');
+      deleteMemory(item.dataset.ns, item.dataset.key);
+    });
+  });
+}
+
+async function loadMemories() {
+  try {
+    const memories = await pywebview.api.get_memories();
+    renderMemories(memories);
+  } catch (e) {
+    console.error('加载记忆失败:', e);
+  }
+}
+
+async function deleteMemory(namespace, key) {
+  if (!confirm('确定删除这条记忆？')) return;
+  try {
+    await pywebview.api.delete_memory(namespace, key);
+    await loadMemories();
+  } catch (e) {
+    addError('删除记忆失败: ' + e.message);
+  }
+}
+
+document.getElementById('mem-refresh-btn').addEventListener('click', loadMemories);
+
+async function deleteDocument(docId) {
+  if (!confirm('确定删除该文档？')) return;
+  try {
+    await pywebview.api.delete_document(docId);
+    await loadDocuments();
+  } catch (e) {
+    addError('删除失败: ' + e.message);
+  }
+}
+
+if (docUploadBtn) {
+  docUploadBtn.addEventListener('click', uploadDocuments);
+}
+
+/* ── Init ────────────────────────────────────────────────────── */
+(function init() {
+  input.disabled = true;
+  sendBtn.disabled = true;
+
+  // Wait for pywebview API to be injected, then bootstrap
+  function boot() {
+    (async function () {
+      try {
+        const raw = await pywebview.api.get_sessions();
+        state.sessions = Array.isArray(raw) ? raw : [];
+
+        if (state.sessions.length === 0) {
+          const session = await pywebview.api.create_session();
+          state.sessions.push(session);
+        }
+        renderSessions();
+
+        const target = state.sessions[0];
+        state.currentId = target.id;
+        const messages = await pywebview.api.get_messages(target.id);
+        renderMessages(messages);
+        await loadDocuments();
+        await loadMemories();
+        // 检查模型状态，如果还在加载则定期轮询
+        const mstatus = await updateModelStatus();
+        if (mstatus === 'loading') {
+          const pollTimer = setInterval(async () => {
+            const s = await updateModelStatus();
+            if (s !== 'loading') clearInterval(pollTimer);
+          }, 1000);
+        }
+      } catch (e) {
+        addError('初始化会话失败: ' + e.message);
+      }
+
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.focus();
+    })();
+  }
+
+  function apiReady() {
+    return typeof pywebview !== 'undefined'
+      && pywebview.api
+      && typeof pywebview.api.get_sessions === 'function';
+  }
+
+  if (apiReady()) {
+    boot();
+  } else {
+    // Poll until pywebview JS API bridge is fully injected
+    var iv = setInterval(function () {
+      if (apiReady()) {
+        clearInterval(iv);
+        boot();
+      }
+    }, 50);
+  }
+})();
+</script>
+</body>
+</html>

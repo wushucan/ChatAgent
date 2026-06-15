@@ -1,0 +1,78 @@
+[project]
+name = "chat-agent"
+version = "1.0.0"
+description = "DeepSeek 驱动的桌面 AI 助手 — 多会话、RAG 知识库、跨会话记忆"
+authors = []
+readme = ""
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "langgraph>=1.0.0",
+    "langchain-deepseek>=0.1.0",
+    "python-dotenv>=1.0.1",
+    "rank-bm25>=0.2.2",
+    "fastembed>=0.5.0",
+    "PyMuPDF>=1.23.0",
+    "python-docx>=1.1.0",
+    "pywebview>=5.0.0",
+    "tavily-python>=0.5.0",
+]
+
+
+[project.optional-dependencies]
+dev = ["mypy>=1.11.1", "ruff>=0.6.1"]
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-dir]
+"" = "src"
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
+
+[tool.ruff]
+lint.select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "D",    # pydocstyle
+    "D401", # First line should be in imperative mood
+    "T201",
+    "UP",
+]
+lint.ignore = [
+    "UP006",
+    "UP007",
+    # We actually do want to import from typing_extensions
+    "UP035",
+    # Relax the convention by _not_ requiring documentation for every function parameter.
+    "D417",
+    "E501",
+]
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "UP"]
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[dependency-groups]
+dev = [
+    "anyio>=4.7.0",
+    "langgraph-cli[inmem]>=0.4.14",
+    "mypy>=1.13.0",
+    "pytest>=8.3.5",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.8.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+source = ["agent"]
+omit = ["__init__.py"]
