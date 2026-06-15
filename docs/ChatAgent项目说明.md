@@ -13,11 +13,12 @@
 | 桌面窗口 | PyWebview（Chromium 内核） |
 | AI 模型 | DeepSeek（deepseek-v4-flash，OpenAI 兼容 API） |
 | Agent 框架 | LangGraph（StateGraph + ReAct 模式） |
-| 文档检索 | Sentence-Transformers + BM25 混合检索 |
+| 文档检索 | FastEmbed（BGE-small-zh，ONNX）+ Chroma |
 | 联网搜索 | Tavily Search API |
 | 前端 | 原生 HTML + CSS + JS（深色主题） |
 | 消息持久化 | JSON 文件 |
 | 跨会话记忆 | JSON 文件（MemoryStore） |
+| 单元测试 | pytest + coverage（94 个测试，覆盖率 75%-100%） |
 
 ---
 
@@ -27,8 +28,11 @@
 demo-agent/
 ├── run_chat.py              # 入口：启动 PyWebview 窗口
 ├── config.json              # 配置（API Key / 模型 / 系统提示词）
+├── config.example.json      # 配置模板（供开发者参考）
 ├── .env                     # 环境变量（可替代 config.json）
-├── pyproject.toml           # 项目元数据 + 依赖
+├── .env.example             # 环境变量模板
+├── CLAUDE.md                # AI 辅助开发指南
+├── pyproject.toml           # 项目元数据 + 依赖 + 测试配置
 ├── .gitignore
 ├── LICENSE                  # MIT
 ├── docs/
@@ -36,6 +40,13 @@ demo-agent/
 │   └── ChatAgent项目说明.md  # 本文件（项目技术说明）
 ├── frontend/
 │   └── index.html           # 桌面 UI（所有界面 + JS 逻辑）
+├── tests/
+│   ├── __init__.py
+│   ├── test_persist.py      # SessionStore 测试（26 个）
+│   ├── test_store.py        # MemoryStore 测试（26 个）
+│   ├── test_rag.py          # RAGEngine 测试（23 个）
+│   └── test_graph.py        # Agent 图测试（19 个）
+├── htmlcov/                 # 覆盖率报告（HTML）
 └── src/agent/
     ├── __init__.py           # 导出 graph 供 LangGraph Server
     ├── graph.py              # LangGraph StateGraph（ReAct Agent）
@@ -117,12 +128,30 @@ PyWebview 自动将 `AgentAPI` 类的同步方法暴露为 `pywebview.api.*`：
 | `langgraph` | Agent 框架、StateGraph、checkpoint |
 | `langchain-deepseek` | DeepSeek LLM 调用 |
 | `pywebview` | 桌面窗口 |
-| `sentence-transformers` | RAG 文档向量化 |
+| `fastembed` | 文本向量化（ONNX 运行时，轻量无 torch） |
+| `chromadb` | 向量存储与检索 |
 | `rank-bm25` | BM25 上下文压缩 |
 | `PyMuPDF` | PDF 解析 |
 | `python-docx` | DOCX 解析 |
 | `tavily-python` | 联网搜索 |
 | `python-dotenv` | .env 配置加载 |
+
+---
+
+## 测试
+
+```bash
+# 安装开发依赖
+pip install -e ".[dev]"
+
+# 运行全部测试
+pytest tests/ -v
+
+# 运行测试 + 覆盖率
+pytest tests/ --cov=agent --cov-report=html
+
+# 覆盖率报告位于 htmlcov/index.html
+```
 
 ---
 
@@ -132,25 +161,31 @@ PyWebview 自动将 `AgentAPI` 类的同步方法暴露为 `pywebview.api.*`：
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --windowed ^
-  --add-data "frontend;frontend" ^
-  --add-data "config.json;." ^
-  --icon icon.ico ^
+rm -rf dist build_pkg
+pyinstaller --onefile --windowed --name "ChatAgent" \
+  --add-data "frontend;frontend" \
+  --add-data "config.json;." \
+  --add-data "src/agent;agent" \
+  --paths "src" \
+  --collect-all "chromadb" \
+  --collect-all "langchain_community" \
+  --collect-all "langchain_core" \
+  --hidden-import "webview" \
+  --hidden-import "fastembed" \
+  --hidden-import "fitz" \
+  --hidden-import "langgraph" \
+  --hidden-import "langchain_deepseek" \
+  --hidden-import "tavily" \
+  --hidden-import "rank_bm25" \
+  --exclude "torch" \
+  --exclude "sentence_transformers" \
   run_chat.py
 ```
 
 注意：
-- `frontend/index.html` 必须作为数据文件打包
-- `sessions/` 目录在运行时自动创建，不需要打包
-- `.env` 和 `config.json` 建议分发给用户自行配置
-
-### 依赖处理
-
-`sentence-transformers` 和 `PyMuPDF` 体积较大，PyInstaller 打包时可能需要额外配置 hidden-import：
-
-```bash
---hidden-import fitz --hidden-import sentence_transformers
-```
+- `--collect-all` 处理 chromadb 等动态导入的包，避免运行时报缺模块
+- `--exclude torch --exclude sentence_transformers` 排除 PyTorch 大幅减小体积
+- 打包后 exe 约 276MB
 
 ---
 
@@ -160,8 +195,7 @@ pyinstaller --onefile --windowed ^
 # 安装
 conda create -n langgraph_env python=3.12
 conda activate langgraph_env
-pip install -e .
-pip install pywebview tavily-python
+pip install -e ".[dev]"
 
 # 运行
 python run_chat.py
@@ -171,4 +205,7 @@ python -m ruff check .
 
 # Ruff 格式化
 python -m ruff format .
+
+# 测试
+pytest tests/ --cov=agent
 ```
